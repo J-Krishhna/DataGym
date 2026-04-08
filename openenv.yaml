@@ -1,0 +1,47 @@
+spec_version: 1
+
+# ── Runtime / Deployment ──────────────────────────────────────────────────────
+name: "DataGym"
+type: space
+runtime: fastapi
+app: "server.app:app"
+port: 8000
+
+# ── Environment metadata ──────────────────────────────────────────────────────
+version: "1.0.0"
+description: >
+  A Reinforcement Learning environment for Autonomous Data Quality Engineers.
+  Agents must repair corrupted datasets (nulls, mixed types, duplicates,
+  schema errors) to match a hidden ground truth — a prerequisite for any
+  system trusted to curate LLM training data.
+
+entrypoint: "server.app:main"
+
+# ── Tasks ─────────────────────────────────────────────────────────────────────
+tasks:
+  - id: "task1_easy"
+    description: >
+      Basic data cleaning: null filling, safe type casting, and deduplication
+      on a single-column employee dataset.
+
+  - id: "task2_medium"
+    description: >
+      Multi-step sequencing constraints: mixed date formats, currency symbols,
+      inconsistent casing, trailing spaces, and outliers in a transactions dataset.
+
+  - id: "task3_hard"
+    description: >
+      Schema corruption recovery: dropping spurious ETL columns and
+      fuzzy-matching altered column names in a product catalogue dataset.
+
+# ── Required environment variables ───────────────────────────────────────────
+env:
+  - name: API_BASE_URL
+    description: "Hugging Face Inference Endpoints base URL for the LLM."
+  - name: HF_TOKEN
+    description: "Hugging Face API token (used as the OpenAI-compatible API key)."
+  - name: MODEL_NAME
+    description: "Model ID to use for agent inference."
+  - name: ENV_BASE_URL
+    description: "Base URL of the FastAPI environment server."
+    default: "http://localhost:8000"
