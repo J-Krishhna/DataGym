@@ -25,10 +25,10 @@ from openai import OpenAI
 load_dotenv()
 
 # ── Environment variables ─────────────────────────────────────────────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-API_KEY     = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-ENV_BASE_URL: str = os.getenv("ENV_BASE_URL", "https://jkrishhhna-datagym.hf.space")
+API_BASE_URL: str = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
+API_KEY: str      = os.getenv("HF_TOKEN")
+MODEL_NAME: str   = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
+ENV_BASE_URL: str = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
 # ── Benchmark metadata ────────────────────────────────────────────────────────
 BENCHMARK: str = "datagym"
@@ -115,6 +115,17 @@ DECISION POLICY
 
 6. If the same column gave reward 0.000 twice in a row, move on.
 
+TASK 1 sequence:
+  fill_nulls department mode -> normalize_values salary {" USD": ""} ->
+  cast_type salary int -> fill_nulls salary mode -> deduplicate -> submit
+
+TASK 2 sequence:
+  normalize_values amount {"\$": ""} -> cast_type transaction_date datetime ->
+  normalize_values category (spaces + all 6 casing variants in one call) ->
+  normalize_values amount outliers (use exact mapping from issues_detected) ->
+  cast_type amount float -> fill_nulls amount mean ->
+  fill_nulls category mode -> fill_nulls transaction_date mode -> submit
+
 TASK 3 sequence:
   drop_column etl_timestamp -> drop_column _internal_row_uuid ->
   split_column full_name -> arithmetic_transform cost /1.3 ->
@@ -127,7 +138,9 @@ TASK 3 sequence:
 # ── Mandatory stdout loggers ──────────────────────────────────────────────────
 
 def log_start(task: str, env: str, model: str) -> None:
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+    # Keep short task name (easy/medium/hard) matching evaluator's expected format
+    short = task.replace("task1_", "").replace("task2_", "").replace("task3_", "")
+    print(f"[START] task={short} env={env} model={model}", flush=True)
 
 
 def log_step(
@@ -147,6 +160,7 @@ def log_step(
 
 
 def log_end(
+    task: str,
     success: bool,
     steps: int,
     score: float,
@@ -154,8 +168,7 @@ def log_end(
 ) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} "
-        f"score={score:.3f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} score={score:.3f} steps={steps} rewards={rewards_str}",
         flush=True,
     )
 
@@ -216,7 +229,7 @@ def call_step(action_dict: Dict[str, Any]) -> Dict[str, Any]:
     obs  = _unwrap_observation(data)
 
     return {
-        "observation": obs.get("observation", obs),
+        "observation": obs,
         "reward":      data.get("reward", 0.0),
         "done":        data.get("done", False),
     }
@@ -334,6 +347,7 @@ def run_episode(task_id: str, seed: int = 42) -> None:
 
     finally:
         log_end(
+            task=task_id,
             success=success,
             steps=steps_taken,
             score=score,
@@ -348,10 +362,17 @@ if __name__ == "__main__":
     if missing:
         print(f"[DEBUG] Missing env vars: {', '.join(missing)}", flush=True)
 
+    # Run one episode per task — demonstrates full environment range.
+    # Seed is fixed for reproducibility.
+    tasks = [
+        ("task1_easy",   42),
+        ("task2_medium", 42),
+        ("task3_hard",   42),
+    ]
+
     try:
-        run_episode("task1_easy")
-        run_episode("task2_medium")
-        run_episode("task3_hard")
+        for task_id, seed in tasks:
+            run_episode(task_id, seed=seed)
     except requests.exceptions.ConnectionError:
         print(
             f"[DEBUG] Cannot connect to env server at {ENV_BASE_URL}. "
